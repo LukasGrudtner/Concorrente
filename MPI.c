@@ -60,11 +60,6 @@ typedef struct {
     double fx, fy, fz;
 } ParticleV;
 
-//necessario para passar parametro na thread
-typedef struct{ 
-    int posicao; 
-}ParametrosThread;
-
 /*! para poder ser acessado no metodo computeForces
 * tem que ficar localizado abaixo da struct
 */
@@ -195,6 +190,9 @@ int main(int argc, char **argv)
 	MPI_Comm comunicador_servos;
 	MPI_Group orig_group, grupo_servos;
 
+	MPI_Datatype stat_type_particle;
+	MPI_Datatype stat_type_particleV;
+
     int i, j;
     int tmp;
     if(argc != 3){
@@ -209,12 +207,22 @@ int main(int argc, char **argv)
   	dt = 0.001; 
   	dt_old = 0.001;
 
-    /* Allocate memory for particles */
-    particles = (Particle *) malloc(sizeof(Particle)*npart);
-    pv = (ParticleV *) malloc(sizeof(ParticleV)*npart);
+  	if (rank == 0) {
+    	/* Allocate memory for particles */
+    	particles = (Particle *) malloc(sizeof(Particle)*npart);
+    	pv = (ParticleV *) malloc(sizeof(ParticleV)*npart);
+	}
+
+    DataType_Particle();
+    DataType_ParticleV();
+
     
     /* Generate the initial values */
-    InitParticles( particles, pv, npart);
+    if (rank == 0) {
+
+    	InitParticles(particles, pv, npart);
+    }
+
     sim_t = 0.0;
 
     /* Inicializando semaforos*/
@@ -232,8 +240,6 @@ int main(int argc, char **argv)
       //printf("tamanho laco: %d\n", tamanho_laco);
     }
 
-    //ParametrosThread * parametros;
-    //parametros = (ParametrosThread *) malloc(sizeof(ParametrosThread)*aux);
 
     int servos[numt - 1];
     for (int i = 1; i < numt; i++) {
@@ -250,31 +256,6 @@ int main(int argc, char **argv)
     } else {
     	ComputeNewPos();
     }
-    /*
-    pthread_t thread[aux];
-    
-    for (long int i = 0; i < aux; i++){
-      if(i < (aux-1)){
-        parametros[i].posicao = i;
-        Compute forces (2D only) 
-        pthread_create(&thread[i], NULL, ComputeForces, (void*)&parametros[i]);
-      }else{
-        Once we have the forces, we compute the changes in position
-        pthread_create(&thread[i], NULL, ComputeNewPos, NULL);
-      }
-    }
-    */
-
-    /*
-    for (long int i = 0; i < aux+1; i++) {
-      //identificador da thread
-      //variavel que ira armazenar o valor retornado pela pthread_exit()
-      pthread_join(thread[i], NULL);
-    }
-    */
-    
-    //for (i=0; i<npart; i++)
-    //  fprintf(stdout,"%.5lf %.5lf\n", particles[i].x, particles[i].y);
     
     sem_destroy(&maxF);
     sem_destroy(&newPos);
@@ -301,3 +282,97 @@ void InitParticles( Particle particles[], ParticleV pv[], int npart )
   		pv[i].fz    = 0;
     }
 }
+
+void DataType_Particle() {
+
+	// Número de tipos de dados que a struct possui
+	int count = 1; // apenas double
+	// Array de tipos dos blocos
+	MPI_Datatype array_of_types[count];
+	// Bloco 0 (único) tem o tipo double
+	array_of_types[0] = MPI_DOUBLE;
+	// Array da quantidade de elementos dos blocos
+	int array_of_blocklengths[count];
+	// Bloco 0 (único) tem 4 elementos
+	array_of_blocklengths[0] = {4};
+
+	// Diz onde cada bloco inicia na memória, contando após
+	// o início da struct
+	MPI_Aint array_of_displaysments[count];
+	MPI_Aint adress1, adress2;
+	MPI_Get_adress(&particles, &adress1);
+	MPI_Get_adress(&particles.ne, &adress2);
+	array_of_displaysments[0] = adress2 - adress1;
+
+	// Cria o MPI Datatype
+	//MPI_Datatype stat_type;
+	MPI_Type_create_struct(count, array_of_blocklengths, array_of_displaysments, array_of_types, &stat_type_particle);
+	MPI_Type_commit(&stat_type_particle);
+}
+
+void DataType_ParticleV() {
+
+	// Número de tipos de dados que a struct possui
+	int count = 1; // apenas double
+	// Array de tipos dos blocos
+	MPI_Datatype array_of_types[count];
+	// Bloco 0 tem o tipo double
+	array_of_types[0] = MPI_DOUBLE;
+	// Array da quantidade de elementos dos blocos
+	int array_of_blocklengths[count];
+	// Bloco 0 tem 6 elementos
+	array_of_blocklengths[0] = {6};
+
+	// Diz onde cada bloco inicia na memória, contando após
+	// o início da struct
+	MPI_Aint array_of_displaysments[count];
+	MPI_Aint adress1, adress2;
+	MPI_Get_adress(&pv, &adress1);
+	MPI_Get_adress(&pv.ne, &adress2);
+	array_of_displaysments[0] = adress2 - adress1;
+
+	// Cria o MPI Datatype
+	//MPI_Datatype stat_type;
+	MPI_Type_create_struct(count, array_of_blocklengths, array_of_displaysments, array_of_types, &stat_type_particleV);
+	MPI_Type_commit(&stat_type_particleV);
+}
+
+
+
+//int MPI_Type_struct(int count, 
+//						const int *array_of_blocklengths,
+                   //   const MPI_Aint *array_of_displacements,
+                   //	const MPI_Datatype *array_of_types,
+                   //	MPI_Datatype *newtype)
+
+struct Particle _particle;
+
+//int count :: (número de tipos de dados que a struct possui)
+int count = 1; // (apenas double)
+// Diz o tipo de cada bloco
+MPI_Datatype array_of_types[count];
+// Tem apenas um tipo double
+array_of_types[0] = MPI_DOUBLE;
+// Diz quantos elementos por bloco
+int array_of_blocklengths[count];
+// Temos 4 double
+array_of_blocklengths[0] = {4};
+
+// Diz onde cada bloco inicia na memória, contando após
+// o início da struct
+MPI_Aint array_of_displaysments[count];
+MPI_Aint adress1, adress2;
+MPI_Get_adress(&_particle, &adress1);
+MPI_Get_adress(&_particle.ne, &adress2);
+array_of_displaysments[0] = adress2 - adress1;
+
+// Cria o MPI Datatype
+MPI_Datatype stat_type;
+MPI_Type_create_struct(count, array_of_blocklengths, array_of_displaysments, array_of_types, &stat_type);
+MPI_Type_commit(&stat_type);
+
+// Agora estamos prontos para enviar
+MPI_Send(&_particle, 1, stat_type, dest, tag, comm);
+
+// Libera datatype
+MPI_Type_free(&stat_type);

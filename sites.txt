@@ -1,0 +1,5 @@
+http://www.mpich.org/static/docs/v3.1/www3/MPI_Type_struct.html
+
+http://stackoverflow.com/questions/16630155/mpi-datatype-for-structure-of-arrays
+
+http://stackoverflow.com/questions/18165277/how-to-send-a-variable-of-type-struct-in-mpi-send
